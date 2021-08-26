@@ -1,0 +1,751 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="Libraries/webgl-debug.js"></script>
+<script src="Libraries/gl-matrix-min.js"></script>
+
+<script id="vShader" type="x-shader/x-vertex">
+	attribute vec4 aVertexPosition; 
+	attribute vec2 aTextureCoordinates;
+	
+	uniform mat4 uModelTransform; 
+	uniform mat4 uPerspectiveViewTransform;
+
+	varying vec2 vTextureCoordinates;
+
+	void main() {
+		gl_Position = uPerspectiveViewTransform * uModelTransform * aVertexPosition; 
+		vTextureCoordinates = aTextureCoordinates;  
+	} 
+</script>
+
+
+<script id="fShader" type="x-shader/x-fragment">
+	precision mediump float; 
+	varying vec2 vTextureCoordinates;
+	uniform sampler2D uSampler;
+	
+	void main() {
+		gl_FragColor = texture2D(uSampler, vTextureCoordinates);
+	}
+</script>
+
+<script>
+var gl; 
+var canvas; 
+var shadersProgram; 
+
+
+var vertexColorAttributePointer;
+var vertexPositionAttributePointer; 
+var textureCoordinatesAttributePointer;
+
+var modelUniformPointer;
+var perspectiveViewUniformPointer;
+
+var uSamplerPointer;
+
+var vertexBuffer; 
+var indexBuffer; 
+
+var floorVBuffer;
+var floorIBuffer;
+// ----------------------- legs -------------------------
+var legvertexBuffer; 
+var legoneBuffer;	
+var colorleg1Buffer;
+
+var leg2vertexBuffer;
+var leg2oneBuffer;
+
+var leg3vertexBuffer;
+var leg3oneBuffer;
+
+var leg4vertexBuffer;
+var leg4oneBuffer;
+
+var skyvertexBuffer
+var skyindexBuffer; 
+//------------------------------------------------------
+
+// ----------------------- Chair -----------------------
+var chairertexBuffer;
+var chairBuffer
+var chairtexture
+
+var chairleg1texBuffer
+var chairleg1Buffer
+var chairleg1texture
+
+var translationMatrix = new Float32Array(16);
+var rotationXMatrix = new Float32Array(16); 
+//------------------------------------------------------
+var textureBuffer;
+
+var tetraTexture;
+var floorTexture;
+var skyboxTexture;
+
+var legonetexture; 
+var leg2onetexture; 
+var leg3onetexture; 
+var leg4onetexture; 
+
+var totalAngle=0; 
+var totalZ=0.2;
+
+var vMatrix = new Float32Array(16);
+var pMatrix = new Float32Array(16);
+var pvMatrix = new Float32Array(16);
+
+var requestId=0; 
+
+var numberOfFrames;
+var previousTime;
+var currentTime;
+
+var mouseDown = false; 
+var deltaFresh = false;
+						
+var lastMouseX = null; 
+var lastMouseY = null; 
+var currMouseX = null;
+var currMouseY = null;
+var deltaMouseX = 0; 
+var deltaMouseY = 0;
+var wheelRadiusFactor = 1; 
+var rect; 	
+
+function createGLContext(canvas) {
+	var context = null;
+
+	context = canvas.getContext("webgl");  
+	if (!context)
+		context = canvas.getContext("experimental-webgl"); 
+	if (context) {
+		context.viewportWidth = canvas.width; 
+		context.viewportHeight = canvas.height; 
+	} 
+	else {
+		alert("Failed to create WebGL context!");
+	}
+	return context;
+}
+
+function createCompileShader(shaderType, shaderSource) {
+	var shader = gl.createShader(shaderType); 
+	gl.shaderSource(shader, shaderSource); 
+	gl.compileShader(shader); 
+
+	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) { 
+		alert("Error compiling shader" + gl.getShaderInfoLog(shader)); 
+		gl.deleteShader(shader);  
+		return null;
+	}
+	return shader;  
+}
+
+function initShaders() {
+	
+	var vertexShaderSource = document.getElementById("vShader").textContent; 
+	var fragmentShaderSource = document.getElementById("fShader").textContent; 
+	
+	var vertexShader = createCompileShader(gl.VERTEX_SHADER, vertexShaderSource); 
+	var fragmentShader = createCompileShader(gl.FRAGMENT_SHADER, fragmentShaderSource); 
+
+	shadersProgram = gl.createProgram(); 
+	gl.attachShader(shadersProgram, vertexShader); 
+	gl.attachShader(shadersProgram, fragmentShader); 
+	gl.linkProgram(shadersProgram); 
+
+	if (!gl.getProgramParameter(shadersProgram, gl.LINK_STATUS)) {
+		alert("Failed to setup shaders");
+	}
+
+	gl.useProgram(shadersProgram); 
+
+	vertexPositionAttributePointer = gl.getAttribLocation(shadersProgram, "aVertexPosition"); 
+	gl.enableVertexAttribArray(vertexPositionAttributePointer); 
+
+	textureCoordinatesAttributePointer = gl.getAttribLocation(shadersProgram, "aTextureCoordinates");
+	gl.enableVertexAttribArray(textureCoordinatesAttributePointer);
+	
+	modelUniformPointer = gl.getUniformLocation(shadersProgram, "uModelTransform"); 
+	perspectiveViewUniformPointer = gl.getUniformLocation(shadersProgram, "uPerspectiveViewTransform");
+	
+	uSamplerPointer = gl.getUniformLocation(shadersProgram, "uSampler");
+}
+
+function initBuffers() {
+
+// arxi ouranos
+	var sky = new Float32Array([
+					-200.0, -200.0, -200.0, 1.0, 
+					 200.0, -200.0, -200.0, 1.0, 
+					 200.0,  200.0, -200.0, 1.0, 
+					-200.0,  200.0, -200.0, 1.0, 
+					-200.0, -200.0,  200.0, 1.0, 
+					 200.0, -200.0,  200.0, 1.0, 
+					 200.0,  200.0,  200.0, 1.0, 
+					-200.0,  200.0,  200.0, 1.0, 			
+				]);
+	skyvertexBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ARRAY_BUFFER, skyvertexBuffer); 
+	gl.bufferData(gl.ARRAY_BUFFER, sky,	gl.STATIC_DRAW); 
+	skyvertexBuffer.itemSize = 4;  
+	skyvertexBuffer.itemCount = 8;
+	
+
+	var skyindexMatrix = new Uint16Array([
+					0,1,2,  
+					0,3,2,  
+					
+					0,4,5,  
+					0,1,5,  
+					
+					0,3,7,  
+					0,4,7,  
+					
+					3,7,6,  
+					3,2,6,  
+					
+					1,5,6,  
+					1,2,6,  
+					
+					4,7,6,  
+					4,5,6  
+				]);
+	skyindexBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, skyindexBuffer); 
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, skyindexMatrix,gl.STATIC_DRAW);
+	skyindexBuffer.itemCount = 36; 
+
+	var originalcubeVertices = new Float32Array([
+					-1.0,  -1.0, -1.0, 1.0,
+					 1.0,  -1.0, -1.0, 1.0, 
+					 1.0,   1.0, -1.0, 1.0, 
+					-1.0,   1.0, -1.0, 1.0, 
+					-1.0,  -1.0,  1.0, 1.0, 
+					 1.0,  -1.0,  1.0, 1.0, 
+					 1.0,   1.0,  1.0, 1.0, 
+					-1.0,   1.0,  1.0, 1.0, 
+				]);
+	vertexBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer); 
+	gl.bufferData(gl.ARRAY_BUFFER, originalcubeVertices,	gl.STATIC_DRAW); 
+	vertexBuffer.itemSize = 4;  
+	vertexBuffer.itemCount = 8;
+	
+
+	var indexMatrix = new Uint16Array([
+					0,1,2,  
+					0,3,2,  
+					
+					0,4,5,  
+					0,1,5,  
+					
+					0,3,7,  
+					0,4,7,  
+					
+					3,7,6,  
+					3,2,6, 
+					
+					1,5,6,  
+					1,2,6,  
+					
+					4,7,6,  
+					4,5,6  
+				]);
+	indexBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer); 
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexMatrix,gl.STATIC_DRAW);
+	indexBuffer.itemCount = 36; 
+
+	var chairVert = new Float32Array([
+					  5.0,  -5.0,  10.0,  1.0, 
+					 15.0, 	-5.0,  10.0,  1.0, 
+					 15.0,   5.0,  10.0,  1.0, 
+					  5.0, 	 5.0,  10.0,  1.0, 
+					  5.0,  -5.0,   9.0,  1.0, 
+					 15.0,  -5.0,   9.0,  1.0, 
+					 15.0,   5.0,   9.0,  1.0, 
+					  5.0,   5.0,   9.0,  1.0  
+				]); 
+	
+	chairertexBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ARRAY_BUFFER, chairertexBuffer); 
+	gl.bufferData(gl.ARRAY_BUFFER, chairVert,	gl.STATIC_DRAW); 
+	chairertexBuffer.itemSize = 4;  
+	chairertexBuffer.itemCount = 8;
+	
+	var charindex = new Uint16Array([
+					0,1,2,  
+					0,2,3,  
+					
+					0,4,5,  
+					0,1,5,  
+					
+					0,3,7,  
+					0,4,7,  
+					
+					3,7,6,  
+					3,2,6,  
+					
+					1,5,6,  
+					1,2,6, 
+					
+					4,7,6,  
+					4,5,6  
+				]);
+	chairBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, chairBuffer); 
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, charindex,gl.STATIC_DRAW);
+	chairBuffer.itemCount = 36;
+
+	var chairlegoneVert = new Float32Array([
+					  9.5,  -0.5,  -0.2,  1.0, 
+					  10.5, -0.5,  -0.2,  1.0, 
+					  10.5, -0.5,  10.0,  1.0, 
+					  9.5,  -0.5,  10.0,  1.0, 
+					  10.5,  0.5,  -0.2,  1.0, 
+					  9.5,   0.5,  -0.2,  1.0, 
+					  10.5,  0.5,  10.0,  1.0, 
+					  9.5,   0.5,  10.0,  1.0  
+				]); 
+	
+	chairleg1texBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ARRAY_BUFFER, chairleg1texBuffer); 
+	gl.bufferData(gl.ARRAY_BUFFER, chairlegoneVert,	gl.STATIC_DRAW); 
+	chairleg1texBuffer.itemSize = 4;  
+	chairleg1texBuffer.itemCount = 8;
+	
+	var chairleg1index = new Uint16Array([
+					0,1,2,  
+					0,3,2,  
+					
+					0,5,4, 
+					0,1,4,  
+					
+					1,4,6, 
+					1,2,6, 
+					
+					0,5,7, 
+					0,3,7, 
+					
+					5,4,6, 
+					5,7,6, 
+					
+					3,2,6, 
+					3,7,6 
+				]);
+	chairleg1Buffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, chairleg1Buffer); 
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chairleg1index,gl.STATIC_DRAW);
+	chairleg1Buffer.itemCount = 36;
+	
+	var chairback = new Float32Array([
+					  14.5, -5.0,  10.0,  1.0,
+					  15.0, -5.0,  10.0,  1.0, 
+					  15.0, -5.0,  20.0,  1.0, 
+					  14.5, -5.0,  20.0,  1.0, 
+					  14.5, -5.0,  10.0,  1.0, 
+					  15.0,  5.0,  10.0,  1.0, 
+					  15.0,  5.0,  20.0,  1.0, 
+					  14.5,  5.0,  20.0,  1.0  
+				]); 
+	
+	chairbackxBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ARRAY_BUFFER, chairbackxBuffer); 
+	gl.bufferData(gl.ARRAY_BUFFER, chairlegoneVert,	gl.STATIC_DRAW); 
+	chairbackxBuffer.itemSize = 4;  
+	chairbackxBuffer.itemCount = 8;
+	
+	var chairbackindex = new Uint16Array([
+					0,1,2, 
+					0,3,2,  
+					
+					0,5,4, 
+					0,1,4,  
+					
+					1,4,6, 
+					1,2,6, 
+					
+					0,5,7, 
+					0,3,7, 
+					
+					5,4,6, 
+					5,7,6, 
+					
+					3,2,6, 
+					3,7,6 
+				]);
+	chairbackindexBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, chairbackindexBuffer); 
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, chairbackindex,gl.STATIC_DRAW);
+	chairbackindexBuffer.itemCount = 36;
+	
+	var floorVertices = new Float32Array([
+				-20.0,  -20.0, -0.2,  1.0,	
+				 20.0,  -20.0, -0.2,  1.0,	
+				 20.0,   20.0, -0.2,  1.0,	
+				-20.0,   20.0, -0.2,  1.0	
+				]);
+	floorVBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ARRAY_BUFFER, floorVBuffer); 
+	gl.bufferData(gl.ARRAY_BUFFER, floorVertices,gl.STATIC_DRAW); 
+	floorVBuffer.itemSize = 4;  
+	floorVBuffer.itemCount = 4;
+	
+	
+	var floorIndex = new Uint16Array([
+				0,1,2,	
+				0,2,3	
+				]);
+	floorIBuffer = gl.createBuffer(); 
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, floorIBuffer); 
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, floorIndex,gl.STATIC_DRAW);
+	floorIBuffer.itemCount = 6; 
+
+	textureBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	var textureCoordinates=new Float32Array([
+							0.0,0.0,
+							1.0,0.0,
+							1.0,1.0,
+							0.0,1.0]);
+	gl.bufferData(gl.ARRAY_BUFFER, textureCoordinates, gl.STATIC_DRAW);  
+	textureBuffer.itemSize = 2;
+
+	tetraTexture = gl.createTexture();
+	var tetraImageURL = "Images/woodtable.png";
+	preprocessTextureImage(tetraImageURL, tetraTexture);
+	
+	floorTexture = gl.createTexture();
+	var floorImageURL = "Images/marblefloor.png";
+	preprocessTextureImage(floorImageURL, floorTexture);
+	
+	chairtexture = gl.createTexture();
+	var chairImageURL = "Images/fabric.png";
+	preprocessTextureImage(chairImageURL, chairtexture);
+	
+	skyboxTexture = gl.createTexture();
+	var skyboxImageURL = "Images/sky.jpg";
+	preprocessTextureImage(skyboxImageURL, skyboxTexture);	
+		
+}
+
+function preprocessTextureImage(imageURL, textureObject) {
+
+	var imageObject = new Image();
+		
+	imageObject.onload = function() {    
+		gl.bindTexture(gl.TEXTURE_2D, textureObject);
+		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageObject);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+		gl.generateMipmap(gl.TEXTURE_2D);
+	}
+	imageObject.src = imageURL;	
+}
+
+function drawScene() { 
+
+	if (!mouseDown){
+		var txtStepAngle = 1;
+		var numStepAngle = parseFloat(txtStepAngle);
+		numStepAngle = numStepAngle*Math.PI/180.0; 
+		totalAngle += numStepAngle; 
+		
+		if (totalAngle >= 2*Math.PI) 
+			totalAngle = totalAngle - 2*Math.PI; 
+		else if (totalAngle < 0) 
+			totalAngle = totalAngle + 2*Math.PI; 
+
+		var txtStepΖ = 0.01;
+		var numStepZ = parseFloat(txtStepΖ);
+		totalZ += numStepZ;
+	}
+	
+	if (mouseDown){
+		if(deltaFresh){
+			totalAngle = totalAngle + deltaMouseX*Math.PI/180;
+			
+		}
+		if(deltaFresh){
+			totalZ = totalZ - deltaMouseY/10;
+		}
+		deltaFresh = false;
+		
+	}
+	
+	var vMatrix = glMatrix.mat4.create();
+	var c = Math.cos(totalAngle);
+	var s = Math.sin(totalAngle);
+	
+		
+	glMatrix.mat4.lookAt(vMatrix,[20*wheelRadiusFactor*c,20*wheelRadiusFactor*s,totalZ],[0,0,0],[0,0,10]);
+	
+
+	glMatrix.mat4.identity(pvMatrix);
+	glMatrix.mat4.perspective(pMatrix,Math.PI/2,1,0.01,1000);
+	glMatrix.mat4.multiply(pvMatrix,pMatrix,vMatrix);
+	gl.uniformMatrix4fv(perspectiveViewUniformPointer, false, pvMatrix);
+		
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+	//floor 
+	gl.bindBuffer(gl.ARRAY_BUFFER, floorVBuffer);
+	gl.vertexAttribPointer(vertexPositionAttributePointer, floorVBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,floorIBuffer); 
+	
+	gl.activeTexture(gl.TEXTURE1);
+	gl.bindTexture(gl.TEXTURE_2D, floorTexture); 
+	gl.uniform1i(uSamplerPointer, 1);	
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	gl.vertexAttribPointer(textureCoordinatesAttributePointer, textureBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	
+	var temp=glMatrix.mat4.create();
+	gl.uniformMatrix4fv(modelUniformPointer, false, new Float32Array(temp)); 
+	gl.enable(gl.POLYGON_OFFSET_FILL);
+	gl.drawElements(gl.TRIANGLES,floorIBuffer.itemCount,gl.UNSIGNED_SHORT, 0);   
+
+
+	
+	//end floor
+	
+	//up table
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+	gl.vertexAttribPointer(vertexPositionAttributePointer, vertexBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer); 
+	
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_2D, tetraTexture); 
+	gl.uniform1i(uSamplerPointer, 0);
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	gl.vertexAttribPointer(textureCoordinatesAttributePointer, textureBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	var temp=glMatrix.mat4.create();
+	glMatrix.mat4.translate(temp,temp,[0,0,20]);
+	glMatrix.mat4.scale(temp,temp,[10,10,1/2]);
+	gl.uniformMatrix4fv(modelUniformPointer, false, new Float32Array(temp)); 
+	gl.drawElements(gl.TRIANGLES,indexBuffer.itemCount,gl.UNSIGNED_SHORT, 0);
+	//end
+	
+	//legs with loop
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+	gl.vertexAttribPointer(vertexPositionAttributePointer, vertexBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer); 
+	
+	gl.activeTexture(gl.TEXTURE1);
+	gl.bindTexture(gl.TEXTURE_2D, tetraTexture); 
+	gl.uniform1i(uSamplerPointer, 1);
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	gl.vertexAttribPointer(textureCoordinatesAttributePointer, textureBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	for(var p=-19; p<=19; p+=38){
+		for(var i=-19; i<=19; i+=38){
+			var temp=glMatrix.mat4.create();
+			glMatrix.mat4.scale(temp,temp,[1/2,1/2,10]);
+			glMatrix.mat4.translate(temp,temp,[p,i,1]);
+			gl.uniformMatrix4fv(modelUniformPointer, false, new Float32Array(temp)); 
+			gl.drawElements(gl.TRIANGLES,indexBuffer.itemCount,gl.UNSIGNED_SHORT, 0);
+		}
+	}
+	
+	//end loop
+		
+	//chair 
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+	gl.vertexAttribPointer(vertexPositionAttributePointer, vertexBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer); 
+	
+	gl.activeTexture(gl.TEXTURE3);
+	gl.bindTexture(gl.TEXTURE_2D, chairtexture); 
+	gl.uniform1i(uSamplerPointer, 3);
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	gl.vertexAttribPointer(textureCoordinatesAttributePointer, textureBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	var temp=glMatrix.mat4.create();
+	glMatrix.mat4.scale(temp,temp,[5,5,1/2]);
+	glMatrix.mat4.translate(temp,temp,[2,0,20]);
+	gl.uniformMatrix4fv(modelUniformPointer, false, new Float32Array(temp)); 
+	gl.drawElements(gl.TRIANGLES,indexBuffer.itemCount,gl.UNSIGNED_SHORT, 0);	
+	//endchair
+	
+	//chairlegs
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+	gl.vertexAttribPointer(vertexPositionAttributePointer, vertexBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer); 
+	
+	gl.activeTexture(gl.TEXTURE3);
+	gl.bindTexture(gl.TEXTURE_2D, chairtexture); 
+	gl.uniform1i(uSamplerPointer, 3);
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	gl.vertexAttribPointer(textureCoordinatesAttributePointer, textureBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	for(var p=11; p<=33; p+=18){
+		for(var i=-9; i<=9; i+=18){
+			var temp=glMatrix.mat4.create();
+			glMatrix.mat4.scale(temp,temp,[1/2,1/2,5]);
+			glMatrix.mat4.translate(temp,temp,[p,i,1]);
+			gl.uniformMatrix4fv(modelUniformPointer, false, new Float32Array(temp)); 
+			gl.drawElements(gl.TRIANGLES,indexBuffer.itemCount,gl.UNSIGNED_SHORT, 0);
+		}
+	}
+	//endchairlegs
+	//backchair 
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+	gl.vertexAttribPointer(vertexPositionAttributePointer, vertexBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer); 
+	
+	gl.activeTexture(gl.TEXTURE4);
+	gl.bindTexture(gl.TEXTURE_2D, chairtexture); 
+	gl.uniform1i(uSamplerPointer, 4);
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	gl.vertexAttribPointer(textureCoordinatesAttributePointer, textureBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	var temp=glMatrix.mat4.create();
+	glMatrix.mat4.translate(temp,temp,[14.8,0,15]);
+	glMatrix.mat4.scale(temp,temp,[1/4,5,5]);
+	gl.uniformMatrix4fv(modelUniformPointer, false, new Float32Array(temp)); 
+	gl.drawElements(gl.TRIANGLES,indexBuffer.itemCount,gl.UNSIGNED_SHORT, 0);
+
+	//endofbackchair
+	
+	
+	
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+	gl.vertexAttribPointer(vertexPositionAttributePointer, vertexBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer); 
+	
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_2D, skyboxTexture); 
+	gl.uniform1i(uSamplerPointer, 0);
+	gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+	gl.vertexAttribPointer(textureCoordinatesAttributePointer, textureBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	var temp=glMatrix.mat4.create();
+	glMatrix.mat4.scale(temp,temp,[500,500,500]);
+	gl.uniformMatrix4fv(modelUniformPointer, false, new Float32Array(temp)); 
+	gl.drawElements(gl.TRIANGLES,indexBuffer.itemCount,gl.UNSIGNED_SHORT, 0);
+	
+	
+	
+	
+}
+
+function main() {
+	var minDimension=Math.min(window.innerWidth,window.innerHeight); 
+	canvas = document.getElementById("sceneCanvas"); 
+	canvas.width=0.9*minDimension; 
+	canvas.height=0.9*minDimension; 
+	gl = WebGLDebugUtils.makeDebugContext(createGLContext(canvas)); 
+	initShaders(); 
+	initBuffers(); 
+	gl.clearColor(0.0, 0.0, 0.0, 1.0); 
+	gl.enable(gl.DEPTH_TEST); 
+	
+	previousTime = Date.now();
+	numberOfFrames = 0;
+
+	canvas.onmousedown = handleMouseDown;
+    window.onmouseup = handleMouseUp;
+	canvas.onmousemove = handleMouseMove;
+	canvas.onwheel = handleMouseWheel;
+	
+	rect = canvas.getBoundingClientRect();
+	
+	startAnimation(); 
+}
+
+
+function handleMouseDown(event) {
+		mouseDown = true;
+		lastMouseX = event.clientX - rect.left;
+		lastMouseY = rect.bottom - event.clientY;
+		deltaMouseX = 0;
+		deltaMouseY = 0;
+		deltaFresh = true;
+}
+
+
+function handleMouseUp(event) {
+    mouseDown = false;
+}
+
+
+function handleMouseMove(event) {
+		currMouseX = event.clientX - rect.left;
+		currMouseY = rect.bottom - event.clientY;
+		document.getElementById("mouseX").innerHTML = currMouseX;
+		document.getElementById("mouseY").innerHTML = currMouseY;
+
+		if (mouseDown)
+		{
+			deltaMouseX = currMouseX - lastMouseX;
+			deltaMouseY = currMouseY - lastMouseY;
+			deltaFresh = true;
+		}
+	
+		if(!requestId) 
+			drawScene ();
+		
+	
+		lastMouseX = currMouseX;
+		lastMouseY = currMouseY;
+}
+
+function handleMouseWheel(event) {
+		
+		if (event.deltaY > 0)
+			wheelRadiusFactor = wheelRadiusFactor*1.01;
+		else
+			wheelRadiusFactor = wheelRadiusFactor*0.99;
+
+	if(!requestId)
+		drawScene ();
+
+}
+
+function startAnimation() {
+	if (requestId === 0)
+		animationStep();
+}
+
+function animationStep() {
+	drawScene();
+	numberOfFrames++;
+	currentTime = Date.now();
+	if (currentTime - previousTime >= 1000)
+	{
+		document.getElementById("fps").innerHTML = numberOfFrames;
+		numberOfFrames = 0;
+		previousTime = currentTime;
+	}
+	requestId = window.requestAnimationFrame(animationStep);
+
+}
+
+function stopAnimation() {
+	window.cancelAnimationFrame(requestId);
+	requestId = 0;
+}
+</script>
+
+</head>
+
+<body onload="main()">
+<canvas id="sceneCanvas" >
+</canvas>
+<p>
+
+Frame Rate (Frames Per Second - FPS):<span id="fps">--</span><BR>
+Position of the mouse on the canvas x:<span id="mouseX">--</span>,y:<span id="mouseY">--</span>
+<button onClick=startAnimation()>Start!</button>
+<button onClick=stopAnimation()>Stop!</button>
+</p>
+</body>
+</html>
