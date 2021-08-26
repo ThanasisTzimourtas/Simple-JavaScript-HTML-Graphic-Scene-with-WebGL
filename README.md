@@ -5,4 +5,4 @@ WebGL programs consist of control code written in JavaScript and shader code (GL
 This project uses WebGL to represent a small interactive graphical scene created as part of a demonstration of WebGL capabilities.
 
 
-![Demo](https://user-images.githubusercontent.com/55353071/131012672-5c1b92a2-50f1-41d3-9da9-bc233bd20f3d.mp4)
+![Demo](https://user-images.githubusercontent.com/55353071/131014346-b4992f77-db05-4bbd-9102-bafb5790a26f.gif)
